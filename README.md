@@ -128,12 +128,14 @@ xcodebuild -scheme PrimeGraphCore -destination 'generic/platform=iOS' build
 tvOS or visionOS. Compiling the module against the SDK alone needs only the SDK, so it covers all six:
 
 ```sh
+out=$(mktemp -d)
 for t in arm64-apple-macos12.0:macosx arm64-apple-ios15.0:iphoneos \
          arm64-apple-ios15.0-macabi:macosx arm64-apple-tvos15.0:appletvos \
          arm64_32-apple-watchos8.0:watchos arm64-apple-xros1.0:xros; do
   xcrun swiftc -emit-module -module-name PrimeGraphCore \
     -sdk "$(xcrun --sdk "${t#*:}" --show-sdk-path)" -target "${t%:*}" \
-    -emit-module-path /dev/null Sources/PrimeGraphCore/*.swift || echo "FAILED ${t%:*}"
+    -emit-module-path "$out/${t%:*}.swiftmodule" Sources/PrimeGraphCore/*.swift \
+    || echo "FAILED ${t%:*}"
 done
 ```
 
