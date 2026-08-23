@@ -1,0 +1,25 @@
+# Build output
+.build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+!Package.swift
+
+# SwiftPM
+.swiftpm/
+Package.resolved
+
+# Credentials and local environment
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+GoogleService-Info.plist
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
