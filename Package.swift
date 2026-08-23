@@ -27,5 +27,10 @@ let package = Package(
             name: "PrimeGraphCore",
             path: "Sources/PrimeGraphCore"
         ),
+        .testTarget(
+            name: "PrimeGraphCoreTests",
+            dependencies: ["PrimeGraphCore"],
+            path: "Tests/PrimeGraphCoreTests"
+        ),
     ]
 )

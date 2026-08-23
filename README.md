@@ -20,11 +20,51 @@ There are five of these, one per target language:
 `primegraph-core-ts`, `primegraph-core-go`, `primegraph-core-swift`, `primegraph-core-py`,
 `primegraph-core-kt`.
 
-## Status
+## What is in here
 
-Scaffolding only. No shared declarations have been migrated yet;
-`Sources/PrimeGraphCore/PrimeGraphCore.swift` holds a single placeholder so the build has something to
-compile.
+Everything that crosses a package boundary, and nothing else.
+
+| Declaration | Why it is shared |
+| ----------- | ---------------- |
+| `AnyCodable` and its nested `JSONValue` | An untyped model field built in one package is read in another. Two copies are two nominal types and neither cast nor conversion between them can be written. |
+| `Runtime.File`, `Runtime.FormPart`, `Runtime.formField` | `File` is the carrier a `binary` model field materializes as, so it travels with the model. |
+| `Runtime.ValidationIssue`, `Runtime.validationError` | The issue type is the payload inside the `DslError` a model package's validator raises. |
+| `AnyDslError`, `DslError`, `DslErrorView`, `DslJsonObjectConvertible` | A protocol declared in two modules is two protocols, so `e as? AnyDslError` fails across a boundary. |
+| `dslErrorMessages`, `defaultErrorMessage`, `dslJsonWire`, `dslArrivedJson`, `dslArrivedCode`, `dslDecodedPayload` | The catch-side reading of a raised error, and what `DslError.payloadJson` is built with. |
+| `Runtime.jsonEncoder`, `Runtime.jsonDecoder`, `Runtime.parseInstant` | Pulled in by the above: the error carrier renders and reads its payload through the one configured encoder and decoder, and the decoder reads an instant through the one tolerant reader. |
+
+## What is deliberately not in here
+
+HTTP transport (`Runtime.HttpAuth` / `HttpRequest` / `HttpResponse` / `HttpValidationFailure`,
+`Runtime.fetch`, `parseResponse`, `parseAnyBody`), everything Firebase, the concurrency helpers
+(`Runtime.Semaphore`, `Runtime.SharedBox`), the JSON-shape primitives the generated validators call,
+and the pure expression helpers. None of those appears in a signature one package shows another, so a
+copy per package costs nothing and keeps this package free of SDK dependencies.
+
+## `Runtime` is a namespace, not the module
+
+Emitted code writes `Runtime.File`, `Runtime.jsonEncoder()` and `Runtime.validationError(...)`
+literally, so `Runtime` stays a namespace enum declared here rather than becoming the module itself —
+a rename would have to be made in every emitter at once and would buy nothing.
+
+A generated package adds its own private members to that same namespace with an extension, so both
+halves answer to the one spelling:
+
+```swift
+import PrimeGraphCore
+
+extension Runtime {
+    public static func fetch(_ req: HttpRequest) async throws -> HttpResponse { /* ... */ }
+}
+```
+
+What a generated package must not do is declare `public enum Runtime` of its own: the local
+declaration would shadow this one, and `Runtime.File` would then name nothing.
+
+## Dependencies
+
+Zero. Foundation only, and that is a constraint, not a coincidence — every generated Swift package
+depends on this one, so anything pulled in here is pulled in everywhere.
 
 ## Platforms
 
@@ -47,11 +87,14 @@ platform is unavailable.
 ## Layout
 
 ```
-Package.swift                              manifest, swift-tools-version 5.9
-Sources/PrimeGraphCore/PrimeGraphCore.swift  public surface
-.githooks/                                 Conventional Commits hook, dependency-free POSIX shell
-scripts/setup.sh                           one-time clone setup
-scripts/release.sh                         the release procedure
+Package.swift                            manifest, swift-tools-version 5.9
+Sources/PrimeGraphCore/AnyCodable.swift  the type-erased JSON carrier
+Sources/PrimeGraphCore/DslError.swift    the error carrier and the catch-side readers
+Sources/PrimeGraphCore/Runtime.swift     the Runtime namespace and its shared members
+Tests/PrimeGraphCoreTests/               XCTest suites, one per source file
+.githooks/                               Conventional Commits hook, dependency-free POSIX shell
+scripts/setup.sh                         one-time clone setup
+scripts/release.sh                       the release procedure
 ```
 
 ## Setup
@@ -68,10 +111,17 @@ The hook rejects any commit message that is not a Conventional Commit: `type(sco
 `build chore ci docs feat fix perf refactor revert style test`, header at most 100 characters, no
 trailing period.
 
-## Build
+## Build and test
 
 ```sh
 swift build
+swift test
+```
+
+A non-macOS platform is checked without an Xcode project:
+
+```sh
+xcodebuild -scheme PrimeGraphCore -destination 'generic/platform=iOS' build
 ```
 
 ## Releasing
