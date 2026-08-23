@@ -124,6 +124,19 @@ A non-macOS platform is checked without an Xcode project:
 xcodebuild -scheme PrimeGraphCore -destination 'generic/platform=iOS' build
 ```
 
+`xcodebuild` needs the platform's runtime installed, which a given machine may not have for watchOS,
+tvOS or visionOS. Compiling the module against the SDK alone needs only the SDK, so it covers all six:
+
+```sh
+for t in arm64-apple-macos12.0:macosx arm64-apple-ios15.0:iphoneos \
+         arm64-apple-ios15.0-macabi:macosx arm64-apple-tvos15.0:appletvos \
+         arm64_32-apple-watchos8.0:watchos arm64-apple-xros1.0:xros; do
+  xcrun swiftc -emit-module -module-name PrimeGraphCore \
+    -sdk "$(xcrun --sdk "${t#*:}" --show-sdk-path)" -target "${t%:*}" \
+    -emit-module-path /dev/null Sources/PrimeGraphCore/*.swift || echo "FAILED ${t%:*}"
+done
+```
+
 ## Releasing
 
 ```sh
