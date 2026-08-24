@@ -32,14 +32,16 @@ Everything that crosses a package boundary, and nothing else.
 | `AnyDslError`, `DslError`, `DslErrorView`, `DslJsonObjectConvertible` | A protocol declared in two modules is two protocols, so `e as? AnyDslError` fails across a boundary. |
 | `dslErrorMessages`, `defaultErrorMessage`, `dslJsonWire`, `dslArrivedJson`, `dslArrivedCode`, `dslDecodedPayload` | The catch-side reading of a raised error, and what `DslError.payloadJson` is built with. |
 | `Runtime.jsonEncoder`, `Runtime.jsonDecoder`, `Runtime.parseInstant` | Pulled in by the above: the error carrier renders and reads its payload through the one configured encoder and decoder, and the decoder reads an instant through the one tolerant reader. |
+| `Runtime.HttpAuth`, `Runtime.HttpRequest`, `Runtime.HttpResponse`, `Runtime.HttpValidationFailure` | A type nested in the shared `Runtime` namespace must be declared once. Two generated packages that both declare `Runtime.HttpRequest` make the initializer ambiguous the moment one build sees both. |
 
 ## What is deliberately not in here
 
-HTTP transport (`Runtime.HttpAuth` / `HttpRequest` / `HttpResponse` / `HttpValidationFailure`,
-`Runtime.fetch`, `parseResponse`, `parseAnyBody`), everything Firebase, the concurrency helpers
-(`Runtime.Semaphore`, `Runtime.SharedBox`), the JSON-shape primitives the generated validators call,
-and the pure expression helpers. None of those appears in a signature one package shows another, so a
-copy per package costs nothing and keeps this package free of SDK dependencies.
+The HTTP transport itself (`Runtime.fetch`, `parseResponse`, `parseAnyBody`) — only its value types
+are shared. Also everything Firebase, the concurrency helpers (`Runtime.Semaphore`,
+`Runtime.SharedBox`), the JSON-shape primitives the generated validators call, and the pure expression
+helpers. Those are functions and non-nested declarations: a copy per package costs nothing, since a
+function added to the namespace from two modules is resolved by argument type rather than being
+ambiguous, and it keeps this package free of SDK dependencies.
 
 ## `Runtime` is a namespace, not the module
 

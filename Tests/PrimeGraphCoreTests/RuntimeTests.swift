@@ -174,9 +174,89 @@ final class RuntimeTests: XCTestCase {
         XCTAssertNotEqual(Runtime.formField("a", "1"), Runtime.formField("a", "2"))
     }
 
+    func testHttpAuthKeepsOnlyWhatItWasGiven() {
+        let auth = Runtime.HttpAuth(type: "apiKey", in: "header", name: "X-Key", value: "abc")
+        XCTAssertEqual(auth.type, "apiKey")
+        XCTAssertEqual(auth.in, "header")
+        XCTAssertEqual(auth.name, "X-Key")
+        XCTAssertEqual(auth.value, "abc")
+        XCTAssertNil(auth.scheme)
+        XCTAssertNil(auth.username)
+        XCTAssertNil(auth.password)
+        XCTAssertNil(auth.token)
+    }
+
+    func testHttpAuthCarriesEveryVariantsFields() {
+        let basic = Runtime.HttpAuth(type: "http", scheme: "basic", username: "u", password: "p")
+        XCTAssertEqual(basic.scheme, "basic")
+        XCTAssertEqual(basic.username, "u")
+        XCTAssertEqual(basic.password, "p")
+        let bearer = Runtime.HttpAuth(type: "http", scheme: "bearer", token: "t")
+        XCTAssertEqual(bearer.token, "t")
+        XCTAssertNil(bearer.username)
+    }
+
+    func testHttpRequestNeedsOnlyUrlAndMethod() {
+        let request = Runtime.HttpRequest(url: "https://example.test/a", method: "GET")
+        XCTAssertEqual(request.url, "https://example.test/a")
+        XCTAssertEqual(request.method, "GET")
+        XCTAssertEqual(request.headers, [:])
+        XCTAssertEqual(request.query, [:])
+        XCTAssertNil(request.body)
+        XCTAssertNil(request.auth)
+        XCTAssertNil(request.timeout)
+    }
+
+    func testHttpRequestKeepsTheFullShape() {
+        let request = Runtime.HttpRequest(
+            url: "https://example.test/a",
+            method: "POST",
+            headers: ["content-type": "application/json"],
+            query: ["q": "1"],
+            body: Data("{}".utf8),
+            auth: Runtime.HttpAuth(type: "http", scheme: "bearer", token: "t"),
+            timeout: 2500
+        )
+        XCTAssertEqual(request.headers["content-type"], "application/json")
+        XCTAssertEqual(request.query["q"], "1")
+        XCTAssertEqual(request.body, Data("{}".utf8))
+        XCTAssertEqual(request.auth?.token, "t")
+        XCTAssertEqual(request.timeout, 2500)
+    }
+
+    func testHttpResponse() {
+        let response = Runtime.HttpResponse(
+            status: 201,
+            headers: ["location": "/a/1"],
+            body: Data("ok".utf8)
+        )
+        XCTAssertEqual(response.status, 201)
+        XCTAssertEqual(response.headers["location"], "/a/1")
+        XCTAssertEqual(String(decoding: response.body, as: UTF8.self), "ok")
+    }
+
+    func testHttpValidationFailure() {
+        let failure = Runtime.HttpValidationFailure(status: 200, issue: "$.a: expected string")
+        XCTAssertEqual(failure.status, 200)
+        XCTAssertEqual(failure.issue, "$.a: expected string")
+    }
+
+    func testHttpValidationFailureTravelsAsARaisedPayload() throws {
+        let raised: Error = DslError(
+            code: "HTTP_VALIDATION_FAILED",
+            payload: Runtime.HttpValidationFailure(status: 500, issue: "boom")
+        )
+        let erased = try XCTUnwrap(raised as? AnyDslError)
+        XCTAssertEqual(erased.code, "HTTP_VALIDATION_FAILED")
+    }
+
     func testSharedTypesAreSendable() {
         requireSendable(Runtime.File.self)
         requireSendable(Runtime.FormPart.self)
         requireSendable(Runtime.ValidationIssue.self)
+        requireSendable(Runtime.HttpAuth.self)
+        requireSendable(Runtime.HttpRequest.self)
+        requireSendable(Runtime.HttpResponse.self)
+        requireSendable(Runtime.HttpValidationFailure.self)
     }
 }

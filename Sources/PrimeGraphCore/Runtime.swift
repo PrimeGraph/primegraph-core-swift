@@ -138,4 +138,86 @@ public enum Runtime {
             payload: ValidationIssue(path: path, expected: expected, actual: actual)
         )
     }
+
+    // The HTTP request/response value types, but not the transport that moves
+    // them: `Runtime.fetch` and `Runtime.parseResponse` stay generated per
+    // package. A function added twice by extension is not ambiguous, a nested
+    // type declared twice is, and these are named at emitted call sites.
+
+    public struct HttpAuth: Sendable {
+        public let type: String
+        public let scheme: String?
+        public let `in`: String?
+        public let name: String?
+        public let value: String?
+        public let username: String?
+        public let password: String?
+        public let token: String?
+        public init(
+            type: String,
+            scheme: String? = nil,
+            `in`: String? = nil,
+            name: String? = nil,
+            value: String? = nil,
+            username: String? = nil,
+            password: String? = nil,
+            token: String? = nil
+        ) {
+            self.type = type
+            self.scheme = scheme
+            self.`in` = `in`
+            self.name = name
+            self.value = value
+            self.username = username
+            self.password = password
+            self.token = token
+        }
+    }
+
+    public struct HttpRequest: Sendable {
+        public let url: String
+        public let method: String
+        public let headers: [String: String]
+        public let query: [String: String]
+        public let body: Data?
+        public let auth: HttpAuth?
+        public let timeout: Double?
+        public init(
+            url: String,
+            method: String,
+            headers: [String: String] = [:],
+            query: [String: String] = [:],
+            body: Data? = nil,
+            auth: HttpAuth? = nil,
+            timeout: Double? = nil
+        ) {
+            self.url = url
+            self.method = method
+            self.headers = headers
+            self.query = query
+            self.body = body
+            self.auth = auth
+            self.timeout = timeout
+        }
+    }
+
+    public struct HttpResponse: Sendable {
+        public let status: Int64
+        public let headers: [String: String]
+        public let body: Data
+        public init(status: Int64, headers: [String: String], body: Data) {
+            self.status = status
+            self.headers = headers
+            self.body = body
+        }
+    }
+
+    public struct HttpValidationFailure: Sendable {
+        public let status: Int64
+        public let issue: String
+        public init(status: Int64, issue: String) {
+            self.status = status
+            self.issue = issue
+        }
+    }
 }
