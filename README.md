@@ -33,15 +33,19 @@ Everything that crosses a package boundary, and nothing else.
 | `dslErrorMessages`, `defaultErrorMessage`, `dslJsonWire`, `dslArrivedJson`, `dslArrivedCode`, `dslDecodedPayload` | The catch-side reading of a raised error, and what `DslError.payloadJson` is built with. |
 | `Runtime.jsonEncoder`, `Runtime.jsonDecoder`, `Runtime.parseInstant` | Pulled in by the above: the error carrier renders and reads its payload through the one configured encoder and decoder, and the decoder reads an instant through the one tolerant reader. |
 | `Runtime.HttpAuth`, `Runtime.HttpRequest`, `Runtime.HttpResponse`, `Runtime.HttpValidationFailure` | A type nested in the shared `Runtime` namespace must be declared once. Two generated packages that both declare `Runtime.HttpRequest` make the initializer ambiguous the moment one build sees both. |
+| `Runtime.SharedBox`, `Runtime.Semaphore` | Same rule. Emitted code writes `Runtime.SharedBox<Int64>(...)` at a call site, so two packages that both use a bounded or shared-variable `parallel` collide exactly the same way. |
+
+The rule those last two rows share is worth stating on its own: **every type nested in `Runtime`
+belongs here**, because the namespace is shared and a nested type declared twice is ambiguous at any
+call site that spells it. Adding a nested type to `Runtime` from a generated package is never correct.
 
 ## What is deliberately not in here
 
 The HTTP transport itself (`Runtime.fetch`, `parseResponse`, `parseAnyBody`) — only its value types
-are shared. Also everything Firebase, the concurrency helpers (`Runtime.Semaphore`,
-`Runtime.SharedBox`), the JSON-shape primitives the generated validators call, and the pure expression
-helpers. Those are functions and non-nested declarations: a copy per package costs nothing, since a
-function added to the namespace from two modules is resolved by argument type rather than being
-ambiguous, and it keeps this package free of SDK dependencies.
+are shared. Also everything Firebase, the JSON-shape primitives the generated validators call, and the
+pure expression helpers. Those are functions rather than nested types: each is looked up through the
+importing file's own module, so a copy per package costs nothing and keeps this package free of SDK
+dependencies.
 
 ## `Runtime` is a namespace, not the module
 

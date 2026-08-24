@@ -139,10 +139,12 @@ public enum Runtime {
         )
     }
 
-    // The HTTP request/response value types, but not the transport that moves
-    // them: `Runtime.fetch` and `Runtime.parseResponse` stay generated per
-    // package. A function added twice by extension is not ambiguous, a nested
-    // type declared twice is, and these are named at emitted call sites.
+    // Everything below is here for one reason: a type nested in this namespace
+    // must be declared exactly once, or the spelling emitted call sites use —
+    // `Runtime.HttpRequest`, `Runtime.SharedBox` — becomes ambiguous as soon as
+    // a build resolves two generated packages. The functions around them
+    // (`fetch`, `parseResponse`, `parseAnyBody`) stay generated: each is looked
+    // up through the importing file's own module.
 
     public struct HttpAuth: Sendable {
         public let type: String
@@ -218,6 +220,53 @@ public enum Runtime {
         public init(status: Int64, issue: String) {
             self.status = status
             self.issue = issue
+        }
+    }
+
+    /// Owns one shared scope variable for the duration of a parallel step.
+    /// `update` runs the whole read-modify-write as one critical section, so a
+    /// concurrent branch cannot lose an update between the read and the write.
+    /// The closure carries DSL expression code, which may raise, so it throws.
+    public actor SharedBox<Value: Sendable> {
+        private var value: Value
+        public init(_ initial: Value) {
+            self.value = initial
+        }
+        public func get() -> Value {
+            return value
+        }
+        @discardableResult
+        public func update(_ fn: @Sendable (Value) throws -> Value) throws -> Value {
+            value = try fn(value)
+            return value
+        }
+    }
+
+    /// Bounds how many branches of a `parallel { ... limit: N }` run at once.
+    /// `acquire` suspends when no permit is free; `release` hands the permit to
+    /// the longest-waiting consumer, so waiters are served FIFO.
+    public actor Semaphore {
+        private var available: Int
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        public init(_ initial: Int) {
+            self.available = initial
+        }
+        public func acquire() async {
+            if available > 0 {
+                available -= 1
+                return
+            }
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                waiters.append(cont)
+            }
+        }
+        public func release() {
+            if let next = waiters.first {
+                waiters.removeFirst()
+                next.resume()
+            } else {
+                available += 1
+            }
         }
     }
 }

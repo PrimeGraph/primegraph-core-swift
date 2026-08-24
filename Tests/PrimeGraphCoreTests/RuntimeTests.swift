@@ -250,6 +250,103 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(erased.code, "HTTP_VALIDATION_FAILED")
     }
 
+    func testSharedBoxReturnsWhatItWasGiven() async {
+        let box = Runtime.SharedBox<Int64>(7)
+        let value = await box.get()
+        XCTAssertEqual(value, 7)
+    }
+
+    func testSharedBoxUpdateReturnsTheNewValue() async throws {
+        let box = Runtime.SharedBox<Int64>(1)
+        let returned = try await box.update { $0 + 41 }
+        XCTAssertEqual(returned, 42)
+        let stored = await box.get()
+        XCTAssertEqual(stored, 42)
+    }
+
+    func testSharedBoxLosesNoConcurrentUpdate() async throws {
+        let box = Runtime.SharedBox<Int64>(0)
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<200 {
+                group.addTask {
+                    _ = try? await box.update { $0 + 1 }
+                }
+            }
+        }
+        let total = await box.get()
+        XCTAssertEqual(total, 200)
+    }
+
+    func testSharedBoxPropagatesAThrowAndKeepsTheOldValue() async throws {
+        let box = Runtime.SharedBox<Int64>(5)
+        do {
+            _ = try await box.update { _ in throw DslError(code: "BOOM", payload: "x") }
+            XCTFail("update swallowed the raise")
+        } catch let error as AnyDslError {
+            XCTAssertEqual(error.code, "BOOM")
+        }
+        let stored = await box.get()
+        XCTAssertEqual(stored, 5)
+    }
+
+    func testSharedBoxCarriesANonNumericValue() async throws {
+        let box = Runtime.SharedBox<[String]>([])
+        _ = try await box.update { $0 + ["a"] }
+        _ = try await box.update { $0 + ["b"] }
+        let stored = await box.get()
+        XCTAssertEqual(stored, ["a", "b"])
+    }
+
+    func testSemaphoreHandsOutThePermitsItHas() async {
+        let sema = Runtime.Semaphore(2)
+        await sema.acquire()
+        await sema.acquire()
+        await sema.release()
+        await sema.release()
+        // Two more must still be free, or the count did not come back.
+        await sema.acquire()
+        await sema.acquire()
+        await sema.release()
+        await sema.release()
+    }
+
+    func testSemaphoreBoundsHowManyRunAtOnce() async {
+        let limit = 3
+        let sema = Runtime.Semaphore(limit)
+        let peak = Runtime.SharedBox<Int64>(0)
+        let inFlight = Runtime.SharedBox<Int64>(0)
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<40 {
+                group.addTask {
+                    await sema.acquire()
+                    let now = (try? await inFlight.update { $0 + 1 }) ?? 0
+                    _ = try? await peak.update { max($0, now) }
+                    await Task.yield()
+                    _ = try? await inFlight.update { $0 - 1 }
+                    await sema.release()
+                }
+            }
+        }
+        let highWater = await peak.get()
+        let left = await inFlight.get()
+        XCTAssertLessThanOrEqual(highWater, Int64(limit))
+        XCTAssertGreaterThan(highWater, 0)
+        XCTAssertEqual(left, 0)
+    }
+
+    func testSemaphoreResumesAWaiter() async {
+        let sema = Runtime.Semaphore(1)
+        await sema.acquire()
+        let waiter = Task {
+            await sema.acquire()
+            await sema.release()
+            return true
+        }
+        await sema.release()
+        let resumed = await waiter.value
+        XCTAssertTrue(resumed)
+    }
+
     func testSharedTypesAreSendable() {
         requireSendable(Runtime.File.self)
         requireSendable(Runtime.FormPart.self)
@@ -258,5 +355,7 @@ final class RuntimeTests: XCTestCase {
         requireSendable(Runtime.HttpRequest.self)
         requireSendable(Runtime.HttpResponse.self)
         requireSendable(Runtime.HttpValidationFailure.self)
+        requireSendable(Runtime.SharedBox<Int64>.self)
+        requireSendable(Runtime.Semaphore.self)
     }
 }
