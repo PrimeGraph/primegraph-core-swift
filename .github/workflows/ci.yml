@@ -1,0 +1,83 @@
+name: CI
+
+# Every generated Swift package depends on this one, so a regression here
+# breaks generated output everywhere. This workflow guards main and everything
+# proposed for it.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Read-only on purpose. A release is a tag, and it is pushed deliberately from
+# a developer machine by scripts/release.sh; CI must never tag or publish.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  commit-messages:
+    name: Conventional Commits
+    # The message check needs git and a POSIX shell, nothing Apple.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5.1.0
+        with:
+          # The hook is run over every commit the change adds, so the whole
+          # history has to be present to name the range.
+          fetch-depth: 0
+
+      # The rules are not restated here: this runs .githooks/commit-msg, the
+      # same script a developer's clone runs, so a message CI accepts is
+      # exactly a message the local hook would have accepted.
+      - name: Run the repository's commit-msg hook over the new commits
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -eu
+          EMPTY=0000000000000000000000000000000000000000
+          LIST=$(mktemp)
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git rev-list --no-merges "$BASE_SHA".."$HEAD_SHA" > "$LIST"
+          elif [ "$PUSH_BEFORE" != "$EMPTY" ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+            git rev-list --no-merges "$PUSH_BEFORE".."$PUSH_AFTER" > "$LIST"
+          else
+            git rev-list --no-merges -1 "$PUSH_AFTER" > "$LIST"
+          fi
+          [ -s "$LIST" ] || echo "no new commits to check"
+          MSG=$(mktemp)
+          STATUS=0
+          while read -r SHA; do
+            git log -1 --format=%B "$SHA" > "$MSG"
+            if sh .githooks/commit-msg "$MSG"; then
+              echo "ok  $(git log -1 --format='%h %s' "$SHA")"
+            else
+              STATUS=1
+            fi
+          done < "$LIST"
+          exit $STATUS
+
+  build-and-test:
+    name: Build and test
+    # A pinned image rather than macos-latest: the image is what fixes the
+    # Swift toolchain, and DEVELOPER_DIR fixes which of its Xcodes provides it.
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v5.1.0
+
+      # Recorded in the log so a toolchain-shaped failure is readable.
+      - run: swift --version
+
+      # The two commands the README documents. The package declares zero
+      # dependencies, so there is nothing to resolve and nothing to cache.
+      - run: swift build
+      - run: swift test
