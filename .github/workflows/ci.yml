@@ -66,14 +66,21 @@ jobs:
 
   build-and-test:
     name: Build and test
-    # The official Swift toolchain image fixes the compiler version. No hosted
-    # macOS image ships a Swift 6.4 Xcode, and the package uses no Apple-only
-    # framework, so it builds and tests on Linux with the same toolchain the
-    # compilation pipeline runs.
-    runs-on: ubuntu-24.04
-    container: swift:6.4-jammy
+    # A pinned image rather than macos-latest. No hosted image ships an Xcode
+    # with Swift 6.4 yet, so the toolchain is installed from swift.org by
+    # swiftly and builds against the SDK of the image's default Xcode.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v5.1.0
+
+      - name: Install the Swift 6.4 toolchain
+        run: |
+          curl -L https://download.swift.org/swiftly/darwin/swiftly.pkg > "$RUNNER_TEMP/swiftly.pkg"
+          installer -pkg "$RUNNER_TEMP/swiftly.pkg" -target CurrentUserHomeDirectory
+          "$HOME/.swiftly/bin/swiftly" init --verbose --assume-yes --skip-install
+          . "$HOME/.swiftly/env.sh"
+          swiftly install --use 6.4.0
+          echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
 
       # Recorded in the log so a toolchain-shaped failure is readable.
       - run: swift --version
