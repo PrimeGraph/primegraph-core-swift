@@ -66,11 +66,12 @@ jobs:
 
   build-and-test:
     name: Build and test
-    # A pinned image rather than macos-latest: the image is what fixes the
-    # Swift toolchain, and DEVELOPER_DIR fixes which of its Xcodes provides it.
-    runs-on: macos-26
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    # The official Swift toolchain image fixes the compiler version. No hosted
+    # macOS image ships a Swift 6.4 Xcode, and the package uses no Apple-only
+    # framework, so it builds and tests on Linux with the same toolchain the
+    # compilation pipeline runs.
+    runs-on: ubuntu-24.04
+    container: swift:6.4-jammy
     steps:
       - uses: actions/checkout@v5.1.0
 
