@@ -74,26 +74,28 @@ depends on this one, so anything pulled in here is pulled in everywhere.
 
 ## Platforms
 
-Every Apple platform is declared, at the lowest floor the code allows:
+The five platforms every generated package declares, at the lowest floor the code allows:
 
 | Platform    | Floor |
 | ----------- | ----- |
 | macOS       | 12    |
 | iOS         | 15    |
 | tvOS        | 15    |
-| watchOS     | 8     |
 | macCatalyst | 15    |
 | visionOS    | 1     |
 
-This package has no Firebase or transport dependency, which is why watchOS can be declared here even
-though the generated packages that pull in `firebase-ios-sdk` cannot. Consumers raise their own floors
-as their SDK dependencies require; this one stays as low as possible so it never becomes the reason a
-platform is unavailable.
+watchOS is not declared: the generated packages cannot declare it, because `firebase-ios-sdk` ships no
+watchOS Firestore slice, so a watchOS build of this package would serve no consumer. Consumers raise
+their own floors as their SDK dependencies require; this one stays as low as possible so it never
+becomes the reason a platform is unavailable.
+
+The manifest is `swift-tools-version:6.4`, so the package builds in the Swift 6 language mode with
+complete concurrency checking, exactly as the generated packages do.
 
 ## Layout
 
 ```
-Package.swift                            manifest, swift-tools-version 5.9
+Package.swift                            manifest, swift-tools-version 6.4
 Sources/PrimeGraphCore/AnyCodable.swift  the type-erased JSON carrier
 Sources/PrimeGraphCore/DslError.swift    the error carrier and the catch-side readers
 Sources/PrimeGraphCore/Runtime.swift     the Runtime namespace and its shared members
@@ -130,17 +132,17 @@ A non-macOS platform is checked without an Xcode project:
 xcodebuild -scheme PrimeGraphCore -destination 'generic/platform=iOS' build
 ```
 
-`xcodebuild` needs the platform's runtime installed, which a given machine may not have for watchOS,
-tvOS or visionOS. Compiling the module against the SDK alone needs only the SDK, so it covers all six:
+`xcodebuild` needs the platform's runtime installed, which a given machine may not have for tvOS or
+visionOS. Compiling the module against the SDK alone needs only the SDK, so it covers all five:
 
 ```sh
 out=$(mktemp -d)
 for t in arm64-apple-macos12.0:macosx arm64-apple-ios15.0:iphoneos \
          arm64-apple-ios15.0-macabi:macosx arm64-apple-tvos15.0:appletvos \
-         arm64_32-apple-watchos8.0:watchos arm64-apple-xros1.0:xros; do
+         arm64-apple-xros1.0:xros; do
   xcrun swiftc -emit-module -module-name PrimeGraphCore \
     -sdk "$(xcrun --sdk "${t#*:}" --show-sdk-path)" -target "${t%:*}" \
-    -emit-module-path "$out/${t%:*}.swiftmodule" Sources/PrimeGraphCore/*.swift \
+    -swift-version 6 -emit-module-path "$out/${t%:*}.swiftmodule" Sources/PrimeGraphCore/*.swift \
     || echo "FAILED ${t%:*}"
 done
 ```
