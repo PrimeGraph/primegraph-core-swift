@@ -79,7 +79,7 @@ jobs:
           installer -pkg "$RUNNER_TEMP/swiftly.pkg" -target CurrentUserHomeDirectory
           "$HOME/.swiftly/bin/swiftly" init --verbose --assume-yes --skip-install
           . "$HOME/.swiftly/env.sh"
-          swiftly install --use 6.4.0
+          swiftly install --use 6.4.1
           echo "$HOME/.swiftly/bin" >> "$GITHUB_PATH"
 
       # Recorded in the log so a toolchain-shaped failure is readable.
